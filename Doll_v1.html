@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Куколка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#4a3550;--pink:#ff6f9f;--bg1:#ffe9f1;--bg2:#e6dcff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{font-family:Nunito,ui-rounded,'Trebuchet MS',system-ui,sans-serif;color:var(--ink);background:linear-gradient(160deg,var(--bg1),var(--bg2));overflow:hidden}
+#app{height:100dvh;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+header{display:flex;gap:8px;justify-content:center;padding:10px 12px 0}
+header button{border:0;border-radius:999px;padding:9px 16px;font:800 14px inherit;font-family:inherit;color:var(--ink);background:#fff;box-shadow:0 3px 0 #e3d3f5}
+header button:active{transform:translateY(2px);box-shadow:0 1px 0 #e3d3f5}
+#stage{flex:1;min-height:0;display:flex;justify-content:center;padding:6px 0}
+#stage svg{height:100%;max-width:100%}
+#panel{background:#fff;border-radius:26px 26px 0 0;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 24px #b79ae233;max-height:44dvh;display:flex;flex-direction:column;gap:10px}
+#tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+#tabs button{flex:none;border:0;border-radius:14px;padding:8px 12px;font:800 13px inherit;font-family:inherit;color:var(--ink);background:#f6effb}
+#tabs button.on{background:var(--pink);color:#fff}
+#sw{display:flex;gap:10px;justify-content:center}
+#sw button{width:30px;height:30px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px #e3d3f5}
+#sw button.on{box-shadow:0 0 0 3px var(--pink)}
+#grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;overflow-y:auto}
+#grid button{width:68px;height:78px;border:2px solid transparent;border-radius:16px;background:#fff6fb;padding:2px;font:700 11px inherit;font-family:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:space-between}
+#grid button.on{border-color:var(--pink)}
+#grid svg{width:100%;height:56px}
+#grid .no{font-size:24px;line-height:56px}
+button:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><button id="rnd">🎲 Случайно</button><button id="rst">↺ Сначала</button></header>
+  <main id="stage"></main>
+  <section id="panel"><nav id="tabs"></nav><div id="sw"></div><div id="grid"></div></section>
+</div>
+<script>
+const tg=window.Telegram&&Telegram.WebApp;
+try{tg.ready();tg.expand();tg.setHeaderColor('#ffe9f1');tg.setBackgroundColor('#ffe9f1')}catch(e){}
+
+/* ---------- рисование ---------- */
+const W='#ffffff';
+const sh=h=>{const n=parseInt(h.slice(1),16);return '#'+[(n>>16)&255,(n>>8)&255,n&255].map(v=>Math.round(v*.78).toString(16).padStart(2,'0')).join('')};
+const P=(d,c)=>`<path d="${d}" fill="${c}" stroke="${sh(c)}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+const E=(x,y,rx,ry,c)=>`<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${c}" stroke="${sh(c)}" stroke-width="2.2"/>`;
+const B=(x,y,rx,ry,c,o)=>`<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${c}" opacity="${o}"/>`;
+const L=(d,w,c)=>`<path d="${d}" fill="none" stroke="${sh(c)}" stroke-width="${w+4}" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+const bow=(x,y,c,s=1)=>`<g transform="translate(${x} ${y}) scale(${s})">${P('M0 0L-16-9V9ZM0 0L16-9V9Z',c)}${E(0,0,4,4,c)}</g>`;
+
+const cap=c=>P('M76 132Q68 56 150 56Q232 56 224 132Q214 98 190 92Q172 110 150 96Q128 110 110 92Q86 98 76 132Z',c);
+const head=c=>P('M74 124Q66 58 150 54Q234 58 226 124Q226 170 150 176Q74 170 74 124Z',c);
+const skirt=(len,w)=>c=>P(`M122 292H178L${150+w} ${292+len}Q150 ${300+len} ${150-w} ${292+len}Z`,c);
+
+const ITEMS={
+hair:[
+ {n:'Длинные',b:c=>P('M74 124Q66 58 150 54Q234 58 226 124L238 352Q190 376 150 340Q110 376 62 352Z',c),f:cap},
+ {n:'Каре',b:c=>P('M74 124Q66 58 150 54Q234 58 226 124L234 222Q150 244 66 222Z',c),f:cap},
+ {n:'Хвостики',b:c=>head(c)+P('M70 120Q30 150 40 250Q74 240 84 150Z',c)+P('M230 120Q270 150 260 250Q226 240 216 150Z',c),f:c=>cap(c)+bow(78,114,'#ff6f9f',.9)+bow(222,114,'#ff6f9f',.9)},
+ {n:'Пучок',b:c=>E(150,42,26,24,c)+head(c),f:cap}],
+makeup:[
+ {n:'Румяна',f:c=>B(98,160,14,8,c,.6)+B(202,160,14,8,c,.6)},
+ {n:'Тени',f:c=>`<path d="M107 136Q122 114 137 136Q122 126 107 136Z M163 136Q178 114 193 136Q178 126 163 136Z" fill="${c}" opacity=".75"/>`},
+ {n:'Помада',f:c=>`<path d="M140 166Q150 182 160 166Q150 172 140 166Z" fill="${c}"/>`},
+ {n:'Полный',f:c=>B(98,160,14,8,c,.6)+B(202,160,14,8,c,.6)+`<path d="M107 136Q122 114 137 136Q122 126 107 136Z M163 136Q178 114 193 136Q178 126 163 136Z" fill="${c}" opacity=".75"/><path d="M140 166Q150 182 160 166Q150 172 140 166Z" fill="${c}"/>`}],
+top:[
+ {n:'Футболка',f:c=>P('M116 206Q150 198 184 206L210 236L192 252L180 240L178 302H122L120 240L108 252L90 236Z',c)},
+ {n:'Топик',f:c=>P('M118 210Q150 202 182 210L180 262Q150 270 120 262Z',c)},
+ {n:'Худи',f:c=>P('M114 206Q150 196 186 206L214 270L196 284L180 252L182 312H118L120 252L104 284L86 270Z',c)+P('M130 288H170L174 310H126Z',c)},
+ {n:'Блузка',f:c=>P('M116 206Q150 198 184 206L206 240Q196 256 184 248L180 302H120L116 248Q104 256 94 240Z',c)+bow(150,214,W)}],
+bottom:[
+ {n:'Юбка',f:skirt(100,62)},
+ {n:'Мини',f:skirt(50,50)},
+ {n:'Шорты',f:c=>P('M122 292H178L180 356H155L150 326L145 356H120Z',c)},
+ {n:'Штаны',f:c=>P('M122 292H178L178 430H156L153 328H147L144 430H122Z',c)}],
+dress:[
+ {n:'Принцесса',f:c=>P('M118 210Q150 202 182 210L178 288L236 408Q150 430 64 408L122 288Z',c)+P('M121 286H179V298H121Z',W)},
+ {n:'Сарафан',f:c=>P('M124 222Q150 214 176 222L180 290L214 378Q150 396 86 378L120 290Z',c)+L('M134 224L130 204',5,c)+L('M166 224L170 204',5,c)},
+ {n:'С бантом',f:c=>P('M124 222Q150 214 176 222L180 290L214 378Q150 396 86 378L120 290Z',c)+L('M134 224L130 204',5,c)+L('M166 224L170 204',5,c)+bow(150,292,W)}],
+bra:[
+ {n:'Спорт',f:c=>P('M120 222Q150 214 180 222L178 248Q150 256 122 248Z',c)},
+ {n:'Треугольный',f:c=>`<path d="M136 224L142 200M164 224L158 200" stroke="${sh(c)}" stroke-width="2" fill="none"/>`+P('M122 246L148 246L136 224Z',c)+P('M152 246L178 246L164 224Z',c)},
+ {n:'С бантиком',f:c=>P('M120 222Q150 214 180 222L178 248Q150 256 122 248Z',c)+bow(150,236,W,.8)}],
+panties:[
+ {n:'Классика',f:c=>P('M124 298H176L170 326Q150 338 130 326Z',c)},
+ {n:'С бантиком',f:c=>P('M124 298H176L170 326Q150 338 130 326Z',c)+bow(150,306,W,.7)},
+ {n:'Шортики',f:c=>P('M124 298H176L178 346H154L150 326L146 346H122Z',c)}],
+shoes:[
+ {n:'Кеды',f:c=>E(133,443,19,10,W)+E(167,443,19,10,W)+`<path d="M114 447Q133 455 152 447M148 447Q167 455 186 447" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/>`},
+ {n:'Балетки',f:c=>E(133,443,17,8,c)+E(167,443,17,8,c)+bow(133,440,W,.6)+bow(167,440,W,.6)},
+ {n:'Сапожки',f:c=>P('M120 396H146V448Q146 456 128 456H114Q112 446 120 440Z',c)+P('M154 396H180V440Q188 446 186 456H172Q154 456 154 448Z',c)}]
+};
+
+const body=k=>L('M133 300V438',22,k)+L('M167 300V438',22,k)+L('M120 214Q94 250 98 300',16,k)+L('M180 214Q206 250 202 300',16,k)
+ +P('M140 190H160V214H140Z',k)+P('M116 208Q150 198 184 208L178 304Q150 312 122 304Z',k)+E(150,130,72,66,k);
+const face=()=>[122,178].map(x=>`<ellipse cx="${x}" cy="142" rx="10" ry="15" fill="#3b2a4a"/><circle cx="${x-4}" cy="136" r="4" fill="#fff"/><circle cx="${x+3}" cy="148" r="2" fill="#fff"/>`).join('')
+ +`<path d="M108 122Q122 114 136 122M164 122Q178 114 192 122" fill="none" stroke="#8a6a6a" stroke-width="3" stroke-linecap="round"/><path d="M142 168Q150 176 158 168" fill="none" stroke="#c0566f" stroke-width="3" stroke-linecap="round"/>`;
+
+function draw(S,view,shadow){
+  const g=(c,p='f')=>{const o=S[c];return o&&o.s>=0?ITEMS[c][o.s][p](o.c):''};
+  const dress=S.dress.s>=0;
+  return `<svg viewBox="${view||'0 0 300 480'}" xmlns="http://www.w3.org/2000/svg">`
+   +(shadow?'<ellipse cx="150" cy="458" rx="84" ry="10" fill="#7a52b822"/>':'')
+   +g('hair','b')+body(S.skin)+g('panties')+g('bra')+(dress?'':g('bottom')+g('top'))+g('dress')+g('shoes')+face()+g('makeup')+g('hair')+'</svg>';
+}
+
+/* ---------- состояние ---------- */
+const CL=['#ff8fb1','#b28dff','#7fd8c0','#ffd166','#6aa7ff','#ffffff','#2b2b3a','#e5484d'];
+const PAL={hair:['#7a4a2b','#2b2433','#f2c36b','#ff8fb1','#6aa7ff','#b28dff','#c9382f'],makeup:['#ff8fb1','#ff6b6b','#b28dff','#e5484d','#ffb36b'],skin:['#ffe0cc','#f7c9a5','#e0a27c','#b97a56','#8a5a3c']};
+const CATS=[['hair','💇‍♀️ Волосы'],['makeup','💄 Макияж'],['top','👚 Верх'],['bottom','👖 Низ'],['dress','👗 Платья'],['bra','👙 Лифчики'],['panties','🩲 Трусы'],['shoes','👟 Обувь'],['skin','🎨 Кожа']];
+const VIEW={hair:'40 30 220 340',makeup:'80 90 140 110',top:'80 190 140 130',bottom:'90 280 120 190',dress:'50 190 200 250',bra:'100 195 100 70',panties:'100 280 100 90',shoes:'100 380 100 90'};
+const pal=c=>PAL[c]||CL;
+const def=()=>({skin:'#ffe0cc',hair:{s:0,c:'#7a4a2b'},makeup:{s:0,c:'#ff8fb1'},top:{s:0,c:'#ff8fb1'},bottom:{s:3,c:'#6aa7ff'},dress:{s:-1,c:'#b28dff'},bra:{s:0,c:'#ffffff'},panties:{s:0,c:'#ffffff'},shoes:{s:0,c:'#ff8fb1'}});
+let S=def(),tab='hair';
+
+function save(){
+  const j=JSON.stringify(S);
+  try{localStorage.setItem('doll',j)}catch(e){}
+  try{tg.CloudStorage.setItem('doll',j,()=>{})}catch(e){}
+}
+function load(cb){
+  const parse=v=>{try{return v?JSON.parse(v):null}catch(e){return null}};
+  try{if(tg&&tg.CloudStorage){tg.CloudStorage.getItem('doll',(e,v)=>cb(e?null:parse(v)));return}}catch(e){}
+  try{cb(parse(localStorage.getItem('doll')))}catch(e){cb(null)}
+}
+
+/* ---------- интерфейс ---------- */
+const $=id=>document.getElementById(id);
+function ui(){
+  $('stage').innerHTML=draw(S,null,true);
+  $('tabs').innerHTML=CATS.map(([c,n])=>`<button data-c="${c}" class="${c===tab?'on':''}">${n}</button>`).join('');
+  const cur=tab==='skin'?S.skin:S[tab].c;
+  $('sw').innerHTML=pal(tab).map(c=>`<button data-col="${c}" class="${c===cur?'on':''}" style="background:${c}" aria-label="цвет"></button>`).join('');
+  if(tab==='skin'){$('grid').innerHTML='';return}
+  const none={s:-1,c:'#ffffff'};
+  let h=`<button data-i="-1" class="${S[tab].s<0?'on':''}"><span class="no">✕</span>нет</button>`;
+  ITEMS[tab].forEach((it,i)=>{
+    const t={skin:S.skin};CATS.forEach(([c])=>{if(c!=='skin')t[c]=none});
+    t[tab]={s:i,c:S[tab].c};
+    h+=`<button data-i="${i}" class="${S[tab].s===i?'on':''}">${draw(t,VIEW[tab])}${it.n}</button>`;
+  });
+  $('grid').innerHTML=h;
+}
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(b){tab=b.dataset.c;ui();b.scrollIntoView&&0}};
+$('sw').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  if(tab==='skin')S.skin=b.dataset.col;else{S[tab].c=b.dataset.col;if(S[tab].s<0)S[tab].s=0}
+  save();ui()};
+$('grid').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  const i=+b.dataset.i;
+  if(i>=0&&(tab==='top'||tab==='bottom'))S.dress.s=-1;
+  S[tab].s=i;save();ui()};
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+$('rnd').onclick=()=>{
+  const k=S.skin;S=def();S.skin=k;
+  Object.keys(ITEMS).forEach(c=>{S[c]={s:Math.floor(Math.random()*ITEMS[c].length),c:pick(pal(c))}});
+  if(Math.random()<.35){S.dress.s=Math.floor(Math.random()*ITEMS.dress.length)}else S.dress.s=-1;
+  S.bra.c=S.panties.c=pick(CL);
+  save();ui();try{tg.HapticFeedback.impactOccurred('light')}catch(e){}
+};
+$('rst').onclick=()=>{const k=S.skin;S=def();S.skin=k;save();ui()};
+
+ui();
+load(v=>{if(v&&v.hair){S=Object.assign(def(),v);ui()}});
+</script>
+</body>
+</html>
