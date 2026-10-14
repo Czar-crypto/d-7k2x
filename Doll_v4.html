@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Куколка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#4a3550;--pink:#ff6f9f;--bg1:#ffe9f1;--bg2:#e6dcff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{font-family:Nunito,ui-rounded,'Trebuchet MS',system-ui,sans-serif;color:var(--ink);background:linear-gradient(160deg,var(--bg1),var(--bg2));overflow:hidden}
+#app{height:100dvh;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+header{display:flex;gap:8px;justify-content:center;padding:10px 12px 0}
+header button{border:0;border-radius:999px;padding:9px 16px;font:800 14px inherit;font-family:inherit;color:var(--ink);background:#fff;box-shadow:0 3px 0 #e3d3f5}
+header button:active{transform:translateY(2px);box-shadow:0 1px 0 #e3d3f5}
+#stage{flex:1;min-height:0;display:flex;justify-content:center;padding:6px 0}
+#stage svg{height:100%;max-width:100%}
+#panel{background:#fff;border-radius:26px 26px 0 0;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 24px #b79ae233;max-height:44dvh;display:flex;flex-direction:column;gap:10px}
+#tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+#tabs button{flex:none;border:0;border-radius:14px;padding:8px 12px;font:800 13px inherit;font-family:inherit;color:var(--ink);background:#f6effb}
+#tabs button.on{background:var(--pink);color:#fff}
+#sw{display:flex;gap:10px;justify-content:center}
+#sw button{width:30px;height:30px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px #e3d3f5}
+#sw button.on{box-shadow:0 0 0 3px var(--pink)}
+#grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;overflow-y:auto}
+#grid button{width:68px;height:78px;border:2px solid transparent;border-radius:16px;background:#fff6fb;padding:2px;font:700 11px inherit;font-family:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:space-between}
+#grid button.on{border-color:var(--pink)}
+#grid svg{width:100%;height:56px}
+#grid .no{font-size:24px;line-height:56px}
+#toast{position:fixed;top:14px;left:50%;transform:translate(-50%,-90px);background:#fff;border-radius:999px;padding:10px 18px;font-weight:800;box-shadow:0 6px 20px #7a52b844;transition:transform .35s;z-index:9;white-space:nowrap}
+#toast.on{transform:translate(-50%,0)}
+#ov{position:fixed;inset:0;background:#4a355099;display:none;align-items:flex-end;z-index:8}
+#ov.on{display:flex}
+#ov .box{background:#fff;border-radius:26px 26px 0 0;width:100%;max-height:75dvh;overflow:auto;padding:18px}
+#ov h2{margin:0 0 4px;font-size:20px}
+.a{display:flex;gap:10px;padding:8px 0;opacity:.45}.a.ok{opacity:1}.a b{display:block}.a small{color:#8a7a95}
+#sw input[type=color]{width:30px;height:30px;border:0;padding:0;border-radius:50%;background:none}
+button:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><button id="rnd">🎲 Случайно</button><button id="rst">↺ Сначала</button><button id="snp">📸</button><button id="trf">🏆 <span id="stars">0</span></button></header><div id="toast"></div><div id="ov"></div>
+  <main id="stage"></main>
+  <section id="panel"><nav id="tabs"></nav><div id="sw"></div><div id="grid"></div></section>
+</div>
+<script>
+const tg=window.Telegram&&Telegram.WebApp;
+try{tg.ready();tg.expand();tg.setHeaderColor('#ffe9f1');tg.setBackgroundColor('#ffe9f1')}catch(e){}
+
+/* ---------- рисование ---------- */
+const W='#ffffff';
+const sh=h=>{const n=parseInt(h.slice(1),16);return '#'+[(n>>16)&255,(n>>8)&255,n&255].map(v=>Math.round(v*.78).toString(16).padStart(2,'0')).join('')};
+const P=(d,c)=>`<path d="${d}" fill="${c}" stroke="${sh(c)}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+const E=(x,y,rx,ry,c)=>`<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${c}" stroke="${sh(c)}" stroke-width="2.2"/>`;
+const B=(x,y,rx,ry,c,o)=>`<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="${c}" opacity="${o}"/>`;
+const L=(d,w,c)=>`<path d="${d}" fill="none" stroke="${sh(c)}" stroke-width="${w+4}" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+const bow=(x,y,c,s=1)=>`<g transform="translate(${x} ${y}) scale(${s})">${P('M0 0L-16-9V9ZM0 0L16-9V9Z',c)}${E(0,0,4,4,c)}</g>`;
+
+const cap=c=>P('M76 132Q68 56 150 56Q232 56 224 132Q214 98 190 92Q172 110 150 96Q128 110 110 92Q86 98 76 132Z',c);
+const head=c=>P('M74 124Q66 58 150 54Q234 58 226 124Q226 170 150 176Q74 170 74 124Z',c);
+const skirt=(len,w)=>c=>P(`M122 292H178L${150+w} ${292+len}Q150 ${300+len} ${150-w} ${292+len}Z`,c);
+
+const SS=c=>L('M120 214Q109.6 228.4 104 245',20,c)+L('M180 214Q190.4 228.4 196 245',20,c);
+const SL=c=>L('M120 214Q97.9 244.6 97.5 285',20,c)+L('M180 214Q202.1 244.6 202.5 285',20,c);
+const ITEMS={
+hair:[
+ {n:'Длинные',b:c=>P('M74 124Q66 58 150 54Q234 58 226 124L238 352Q190 376 150 340Q110 376 62 352Z',c),f:cap},
+ {n:'Каре',b:c=>P('M74 124Q66 58 150 54Q234 58 226 124L234 222Q150 244 66 222Z',c),f:cap},
+ {n:'Хвостики',b:c=>head(c)+P('M70 120Q30 150 40 250Q74 240 84 150Z',c)+P('M230 120Q270 150 260 250Q226 240 216 150Z',c),f:c=>cap(c)+bow(78,114,'#ff6f9f',.9)+bow(222,114,'#ff6f9f',.9)},
+ {n:'Пучок',b:c=>E(150,42,26,24,c)+head(c),f:cap},
+ {n:'Хвост',b:c=>head(c)+P('M210 100Q280 110 262 220Q236 200 218 140Z',c),f:c=>cap(c)+bow(214,104,'#ff6f9f',.9)},
+ {n:'Косички',b:c=>head(c)+P('M72 130Q50 200 66 290Q94 280 88 140Z',c)+P('M228 130Q250 200 234 290Q206 280 212 140Z',c),f:c=>cap(c)+bow(70,292,'#ff6f9f',.8)+bow(230,292,'#ff6f9f',.8)},
+ {n:'Короткие',b:c=>P('M74 124Q66 58 150 54Q234 58 226 124L228 170Q150 190 72 170Z',c),f:cap},
+ {n:'Волны',b:c=>P('M74 124Q66 58 150 54Q234 58 226 124L246 250Q226 300 232 340Q190 320 150 350Q110 320 68 340Q74 300 54 250Z',c),f:cap},
+ {n:'Пучки',b:c=>E(96,56,20,20,c)+E(204,56,20,20,c)+head(c),f:cap},
+ {n:'Высокий хвост',b:c=>head(c)+P('M140 58Q130 10 180 30Q230 60 212 160Q186 110 158 62Z',c),f:cap},
+ {n:'Лохматые',b:c=>P('M70 130Q56 40 150 50Q244 40 230 130L250 200L220 180L236 250L190 200L150 230L110 200L64 250L80 180L50 200Z',c),f:cap},
+ {n:'Каскад',b:c=>P('M74 124Q66 58 150 54Q234 58 226 124L246 330L196 270L150 360L104 270L54 330Z',c),f:cap}],
+makeup:[
+ {n:'Румяна',f:c=>B(98,160,14,8,c,.6)+B(202,160,14,8,c,.6)},
+ {n:'Тени',f:c=>`<path d="M107 136Q122 114 137 136Q122 126 107 136Z M163 136Q178 114 193 136Q178 126 163 136Z" fill="${c}" opacity=".75"/>`},
+ {n:'Помада',f:c=>`<path d="M140 166Q150 182 160 166Q150 172 140 166Z" fill="${c}"/>`},
+ {n:'Полный',f:c=>B(98,160,14,8,c,.6)+B(202,160,14,8,c,.6)+`<path d="M107 136Q122 114 137 136Q122 126 107 136Z M163 136Q178 114 193 136Q178 126 163 136Z" fill="${c}" opacity=".75"/><path d="M140 166Q150 182 160 166Q150 172 140 166Z" fill="${c}"/>`},
+ {n:'Звёздочки',f:c=>P('M96 150L99 157L107 157L101 162L103 170L96 165L89 170L91 162L85 157L93 157Z',c)+P('M204 150L207 157L215 157L209 162L211 170L204 165L197 170L199 162L193 157L201 157Z',c)},
+ {n:'Веснушки',f:c=>`<g fill="${c}" opacity=".75">`+[[90,158],[100,164],[96,152],[110,160],[210,158],[200,164],[204,152],[190,160]].map(a=>`<circle cx="${a[0]}" cy="${a[1]}" r="2.5"/>`).join('')+'</g>'},
+ {n:'Стрелки',f:c=>`<path d="M104 132Q122 116 140 128M160 128Q178 116 196 132" fill="none" stroke="${c}" stroke-width="3.5" stroke-linecap="round"/>`}],
+top:[
+ {n:'Футболка',f:c=>SS(c)+P('M116 206Q150 198 184 206L180 240L178 302H122L120 240Z',c)},
+ {n:'Топик',f:c=>P('M118 210Q150 202 182 210L180 262Q150 270 120 262Z',c)},
+ {n:'Худи',f:c=>SL(c)+P('M114 206Q150 196 186 206L183 312H117Z',c)+P('M130 288H170L174 310H126Z',c)},
+ {n:'Блузка',f:c=>SS(c)+P('M116 206Q150 198 184 206L180 302H120Z',c)+bow(150,214,W)},
+ {n:'Майка',f:c=>P('M124 216Q150 206 176 216L178 298H122Z',c)+L('M133 216L130 200',5,c)+L('M167 216L170 200',5,c)},
+ {n:'Свитер',f:c=>SL(c)+P('M114 206Q150 196 186 206L184 308H116Z',c)+`<path d="M130 204Q150 220 170 204" fill="none" stroke="${sh(c)}" stroke-width="4"/>`},
+ {n:'Топ-сердце',f:c=>P('M118 210Q150 202 182 210L180 268Q150 276 120 268Z',c)+P('M150 252C136 242 140 230 150 236C160 230 164 242 150 252Z',W)},
+ {n:'Рубашка',f:c=>SL(c)+P('M116 206Q150 198 184 206L182 306H118Z',c)+`<path d="M150 210V306" stroke="${sh(c)}" stroke-width="2.5"/>`+bow(150,214,W,.7)}],
+bottom:[
+ {n:'Юбка',f:skirt(100,62)},
+ {n:'Мини',f:skirt(50,50)},
+ {n:'Шорты',f:c=>L('M133 296V350',25,c)+L('M167 296V350',25,c)+P('M121 290H179V306H121Z',c)},
+ {n:'Штаны',f:c=>L('M133 296V432',24,c)+L('M167 296V432',24,c)+P('M121 290H179V306H121Z',c)},
+ {n:'Макси',f:skirt(150,66)},
+ {n:'Плиссе',f:c=>skirt(80,56)(c)+`<path d="M138 296L128 366M150 296V372M162 296L172 366" stroke="${sh(c)}" fill="none"/>`},
+ {n:'Бермуды',f:c=>L('M133 296V388',25,c)+L('M167 296V388',25,c)+P('M121 290H179V306H121Z',c)},
+ {n:'Клёш',f:c=>P('M120 292H180L194 436H156L153 328H147L144 436H106Z',c)}],
+dress:[
+ {n:'Принцесса',f:c=>P('M118 210Q150 202 182 210L178 288L236 408Q150 430 64 408L122 288Z',c)+P('M121 286H179V298H121Z',W)},
+ {n:'Сарафан',f:c=>P('M124 222Q150 214 176 222L180 290L214 378Q150 396 86 378L120 290Z',c)+L('M134 224L130 204',5,c)+L('M166 224L170 204',5,c)},
+ {n:'С бантом',f:c=>P('M124 222Q150 214 176 222L180 290L214 378Q150 396 86 378L120 290Z',c)+L('M134 224L130 204',5,c)+L('M166 224L170 204',5,c)+bow(150,292,W)},
+ {n:'Мини-платье',f:c=>P('M118 210Q150 202 182 210L186 340Q150 352 114 340Z',c)},
+ {n:'Бальное',f:c=>P('M118 210Q150 202 182 210L178 280L260 420Q150 446 40 420L122 280Z',c)+P('M121 280H179V292H121Z',W)},
+ {n:'Футляр',f:c=>P('M120 210Q150 202 180 210L176 400Q150 408 124 400Z',c)},
+ {n:'Пышное мини',f:c=>P('M118 210Q150 202 182 210L178 280L224 350Q150 372 76 350L122 280Z',c)+bow(150,284,W)},
+ {n:'Комбинезон',f:c=>P('M122 212Q150 204 178 212L180 296L178 430H156L153 328H147L144 430H122L120 296Z',c)+L('M134 214L130 200',5,c)+L('M166 214L170 200',5,c)}],
+bra:[
+ {n:'Спорт',f:c=>P('M120 222Q150 214 180 222L178 248Q150 256 122 248Z',c)},
+ {n:'Треугольный',f:c=>`<path d="M136 224L142 200M164 224L158 200" stroke="${sh(c)}" stroke-width="2" fill="none"/>`+P('M122 246L148 246L136 224Z',c)+P('M152 246L178 246L164 224Z',c)},
+ {n:'С бантиком',f:c=>P('M120 222Q150 214 180 222L178 248Q150 256 122 248Z',c)+bow(150,236,W,.8)}],
+panties:[
+ {n:'Классика',f:c=>P('M124 298H176L170 326Q150 338 130 326Z',c)},
+ {n:'С бантиком',f:c=>P('M124 298H176L170 326Q150 338 130 326Z',c)+bow(150,306,W,.7)},
+ {n:'Шортики',f:c=>P('M124 298H176L178 346H154L150 326L146 346H122Z',c)}],
+shoes:[
+ {n:'Кеды',f:c=>E(133,443,19,10,W)+E(167,443,19,10,W)+`<path d="M114 447Q133 455 152 447M148 447Q167 455 186 447" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/>`},
+ {n:'Балетки',f:c=>E(133,443,17,8,c)+E(167,443,17,8,c)+bow(133,440,W,.6)+bow(167,440,W,.6)},
+ {n:'Сапожки',f:c=>P('M120 396H146V448Q146 456 128 456H114Q112 446 120 440Z',c)+P('M154 396H180V440Q188 446 186 456H172Q154 456 154 448Z',c)},
+ {n:'Гольфы',f:c=>P('M122 388H144V442H122Z',c)+P('M156 388H178V442H156Z',c)+E(133,447,17,8,W)+E(167,447,17,8,W)},
+ {n:'Ботинки',f:c=>P('M116 424H146V450Q146 458 128 458H112Q110 448 116 442Z',c)+P('M154 424H184V442Q190 448 188 458H172Q154 458 154 450Z',c)},
+ {n:'Каблуки',f:c=>E(133,446,16,7,c)+E(167,446,16,7,c)+P('M124 450H130V462H124Z',c)+P('M158 450H164V462H158Z',c)},
+ {n:'Кроссы',f:c=>E(133,444,20,11,c)+E(167,444,20,11,c)+E(133,449,20,5,W)+E(167,449,20,5,W)}],
+hat:[
+ {n:'Бантик',f:c=>bow(110,70,c,1.3)},
+ {n:'Корона',f:c=>P('M104 76L112 52L130 68L150 46L170 68L188 52L196 76Z',c)},
+ {n:'Ободок',f:c=>`<path d="M82 112Q150 28 218 112" fill="none" stroke="${sh(c)}" stroke-width="10" stroke-linecap="round"/><path d="M82 112Q150 28 218 112" fill="none" stroke="${c}" stroke-width="6" stroke-linecap="round"/>`},
+ {n:'Ушки',f:c=>P('M90 86L84 36L122 66Z',c)+P('M210 86L216 36L178 66Z',c)},
+ {n:'Шляпка',f:c=>E(150,76,92,16,c)+P('M104 76Q106 24 150 24Q194 24 196 76Z',c)},
+ {n:'Берет',f:c=>E(140,66,50,24,c)+E(150,44,6,6,c)},
+ {n:'Большой бант',f:c=>bow(150,56,c,1.8)},
+ {n:'Цветы',f:c=>[100,125,150,175,200].map((x,i)=>E(x,i%2?66:76,9,9,i%2?c:'#ffd166')).join('')},
+ {n:'Кепка',f:c=>P('M86 96Q90 40 150 38Q210 40 214 96Z',c)+P('M168 92Q210 92 238 108Q210 120 168 106Z',c)}],
+glasses:[
+ {n:'Круглые',f:c=>`<g fill="none" stroke="${c}" stroke-width="4"><circle cx="122" cy="142" r="19"/><circle cx="178" cy="142" r="19"/><path d="M141 140H159"/></g>`},
+ {n:'Сердечки',f:c=>`<path d="M122 156C96 140 104 122 122 132C140 122 148 140 122 156Z M178 156C152 140 160 122 178 132C196 122 204 140 178 156Z" fill="${c}" fill-opacity=".45" stroke="${sh(c)}" stroke-width="2.5"/>`},
+ {n:'Тёмные',f:c=>`<rect x="100" y="128" width="42" height="28" rx="10" fill="${c}" fill-opacity=".85"/><rect x="158" y="128" width="42" height="28" rx="10" fill="${c}" fill-opacity=".85"/><path d="M142 138H158" stroke="${c}" stroke-width="4"/>`},
+ {n:'Кошачьи',f:c=>`<path d="M100 144Q106 126 142 132Q140 156 116 158Q102 156 100 144Z M200 144Q194 126 158 132Q160 156 184 158Q198 156 200 144Z" fill="none" stroke="${c}" stroke-width="4"/>`},
+ {n:'Квадратные',f:c=>`<g fill="none" stroke="${c}" stroke-width="4"><rect x="102" y="128" width="38" height="30" rx="4"/><rect x="160" y="128" width="38" height="30" rx="4"/><path d="M140 138H160"/></g>`}],
+ears:[
+ {n:'Шарики',f:c=>E(80,162,6,6,c)+E(220,162,6,6,c)},
+ {n:'Сердечки',f:c=>P('M80 174C70 166 72 156 80 160C88 156 90 166 80 174Z',c)+P('M220 174C210 166 212 156 220 160C228 156 230 166 220 174Z',c)},
+ {n:'Звёзды',f:c=>P('M80 152L83 160L91 160L85 165L87 173L80 168L73 173L75 165L69 160L77 160Z',c)+P('M220 152L223 160L231 160L225 165L227 173L220 168L213 173L215 165L209 160L217 160Z',c)},
+ {n:'Капли',f:c=>E(80,170,4,8,c)+E(220,170,4,8,c)},
+ {n:'Кольца',f:c=>`<g fill="none" stroke="${c}" stroke-width="3.5"><circle cx="80" cy="170" r="9"/><circle cx="220" cy="170" r="9"/></g>`}],
+tights:[
+ {n:'Колготки',f:c=>L('M133 300V438',22,c)+L('M167 300V438',22,c)},
+ {n:'Чулки',f:c=>L('M133 350V438',22,c)+L('M167 350V438',22,c)},
+ {n:'Полоски',f:c=>L('M133 300V438',22,c)+L('M167 300V438',22,c)+`<path d="M123 330H143M123 360H143M123 390H143M123 420H143M157 330H177M157 360H177M157 390H177M157 420H177" stroke="#fff" stroke-width="6"/>`}],
+jacket:[
+ {n:'Джинсовка',f:c=>SL(c)+P('M114 208Q150 198 186 208L184 306H156L152 232L148 232L144 306H116Z',c)},
+ {n:'Кардиган',f:c=>SL(c)+P('M114 208Q150 198 186 208L184 340H156L152 232L148 232L144 340H116Z',c)},
+ {n:'Накидка',f:c=>P('M110 206Q150 194 190 206L204 290Q150 310 96 290Z',c)}],
+neck:[
+ {n:'Чокер',f:c=>`<path d="M134 196Q150 206 166 196" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="round"/>`},
+ {n:'Бусы',f:c=>[0,1,2,3,4,5,6].map(i=>E(128+i*7.7,201+Math.sin(i/6*Math.PI)*14,3.5,3.5,c)).join('')},
+ {n:'Шарф',f:c=>P('M122 196Q150 218 178 196L182 214Q150 236 118 214Z',c)+P('M164 212L176 262L190 258L180 212Z',c)},
+ {n:'Бабочка',f:c=>bow(150,204,c,.9)}],
+bag:[
+ {n:'Сумочка',f:c=>P('M82 296H112V326H82Z',c)+`<path d="M88 296Q97 280 106 296" fill="none" stroke="${sh(c)}" stroke-width="3"/>`},
+ {n:'Шарик',f:c=>`<path d="M98 300Q80 240 74 190" stroke="#8a7a95" fill="none" stroke-width="2"/>`+E(72,170,22,26,c)},
+ {n:'Цветок',f:c=>`<path d="M98 300L96 258" stroke="#4caf7a" stroke-width="4"/>`+[0,72,144,216,288].map(a=>E(96+Math.cos(a*Math.PI/180)*9,250+Math.sin(a*Math.PI/180)*9,6,6,c)).join('')+E(96,250,5,5,'#ffd166')}],
+pet:[
+ {n:'Рыжий кот',f:()=>PET({t:'c',m:'#e8913a',l:'#fff1dc',d:'#b85d16',e:'#8bc34a',s:1})},
+ {n:'Серый кот',f:()=>PET({t:'c',m:'#8e949b',l:'#eceff1',d:'#5f656b',e:'#ffc233',s:1})},
+ {n:'Чёрный кот',f:()=>PET({t:'c',m:'#2e2e38',l:'#4a4a58',d:'#1c1c24',e:'#ffc233'})},
+ {n:'Белый кот',f:()=>PET({t:'c',m:'#f6f6f6',l:'#ffffff',d:'#d8d8d8',e:'#5ab0ff'})},
+ {n:'Корги',f:()=>PET({t:'d',m:'#e3a14f',l:'#ffffff',d:'#b9772c',e:'#5a3b24',f:'#ffffff'})},
+ {n:'Хаски',f:()=>PET({t:'d',m:'#6f7a86',l:'#ffffff',d:'#4a525c',e:'#5ab0ff',f:'#ffffff'})},
+ {n:'Лабрадор',f:()=>PET({t:'d',m:'#e5c07b',l:'#f4e2b8',d:'#c99a4a',e:'#5a3b24',ear:'f'})},
+ {n:'Кролик',f:()=>PET({t:'b',m:'#f1ece6',l:'#ffffff',d:'#d8cfc4',e:'#c0566f'})}]
+};
+const PET=o=>{const m=o.m,l=o.l,d=o.d,t=o.t,pe='#ffb3c1';
+ const eye=x=>E(x,402,4.6,5.4,o.e)+`<ellipse cx="${x}" cy="402" rx="${t==='c'?1.5:2.8}" ry="${t==='c'?4.6:3.2}" fill="#15121a"/><circle cx="${x+1.6}" cy="400" r="1.4" fill="#fff"/>`;
+ return (t==='b'?E(274,449,8,8,l):L(t==='c'?'M272 452Q300 448 292 418':'M270 450Q292 440 288 424',8,m))
+ +(t==='b'?E(243,376,6,19,m)+E(257,376,6,19,m)+E(243,378,3,13,pe)+E(257,378,3,13,pe):o.ear==='f'?'':P('M231 398L228 370L248 388Z',m)+P('M269 398L272 370L252 388Z',m)+P('M233 394L232 378L244 387Z',pe)+P('M267 394L268 378L256 387Z',pe))
+ +E(250,436,24,27,m)+B(250,445,13,16,l,1)+E(238,459,10,5.5,l)+E(262,459,10,5.5,l)+E(250,404,21,18,m)
+ +(o.ear==='f'?E(231,406,7,14,d)+E(269,406,7,14,d):'')
+ +B(250,412,11,7,l,1)+(o.f?`<path d="M250 387Q244 400 250 410Q256 400 250 387Z" fill="${o.f}"/>`:'')
+ +eye(241)+eye(259)
+ +(t==='d'?E(250,409,4.5,3.2,'#2b2b33')+P('M247 417Q250 426 253 417Z','#ff7a93'):P('M247 408H253L250 412Z','#ff8fa3'))
+ +`<path d="M250 412V414M250 414Q246 418 243 415M250 414Q254 418 257 415" stroke="#6b4a4a" fill="none" stroke-width="1.2" stroke-linecap="round"/>`
+ +(t==='d'?'':`<path d="M238 411L220 407M238 414L220 416M262 411L280 407M262 414L280 416" stroke="#8a7a95" stroke-width="1" opacity=".7"/>`)
+ +(o.s?`<g stroke="${d}" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M250 388V394M244 389L245 394M256 389L255 394M228 428H236M227 436H235M272 428H264M273 436H265"/></g>`:'')
+};
+
+const body=k=>L('M133 300V438',22,k)+L('M167 300V438',22,k)+L('M120 214Q94 250 98 300',16,k)+L('M180 214Q206 250 202 300',16,k)
+ +P('M140 190H160V214H140Z',k)+P('M118 208Q150 198 182 208L177 304Q150 312 123 304Z',k)+E(150,130,72,66,k);
+const face=k=>[122,178].map(x=>`<ellipse cx="${x}" cy="142" rx="10" ry="15" fill="${k}"/><circle cx="${x-4}" cy="136" r="4" fill="#fff"/><circle cx="${x+3}" cy="148" r="2" fill="#fff"/>`).join('')
+ +`<path d="M108 122Q122 114 136 122M164 122Q178 114 192 122" fill="none" stroke="#8a6a6a" stroke-width="3" stroke-linecap="round"/><path d="M142 168Q150 176 158 168" fill="none" stroke="#c0566f" stroke-width="3" stroke-linecap="round"/>`;
+
+function draw(S,view,shadow){
+  const g=(c,p='f')=>{const o=S[c];return o&&o.s>=0?ITEMS[c][o.s][p](o.c):''};
+  const dress=S.dress.s>=0;
+  return `<svg viewBox="${view||'0 0 300 480'}" xmlns="http://www.w3.org/2000/svg">`
+   +(shadow?'<ellipse cx="150" cy="458" rx="84" ry="10" fill="#7a52b822"/>':'')
+   +g('hair','b')+body(S.skin)+g('panties')+g('tights')+g('bra')+(dress?'':g('bottom')+g('top'))+g('dress')+g('jacket')+g('neck')+g('shoes')+g('bag')+g('pet')+face(S.eyes||'#3b2a4a')+g('makeup')+g('hair')+g('ears')+g('glasses')+g('hat')+'</svg>';
+}
+
+/* ---------- состояние ---------- */
+const CL=['#ff8fb1','#b28dff','#7fd8c0','#ffd166','#6aa7ff','#ffffff','#2b2b3a','#e5484d'];
+const PAL={eyes:['#3b2a4a','#3a7bd5','#2e9e6b','#8a5a3c','#9b59d0','#e5484d'],hair:['#7a4a2b','#2b2433','#f2c36b','#ff8fb1','#6aa7ff','#b28dff','#c9382f'],makeup:['#ff8fb1','#ff6b6b','#b28dff','#e5484d','#ffb36b'],skin:['#ffe0cc','#f7c9a5','#e0a27c','#b97a56','#8a5a3c']};
+const CATS=[['hair','💇‍♀️ Волосы'],['makeup','💄 Макияж'],['top','👚 Верх'],['bottom','👖 Низ'],['dress','👗 Платья'],['bra','👙 Лифчики'],['panties','🩲 Трусы'],['shoes','👟 Обувь'],['tights','🧦 Колготки'],['jacket','🧥 Куртки'],['neck','📿 Шея'],['bag','👜 В руке'],['pet','🐾 Питомец'],['hat','🎀 Шапки'],['glasses','👓 Очки'],['ears','💎 Серьги'],['eyes','👁 Глаза'],['skin','🎨 Кожа'],['bg','🖼 Фон']];
+const VIEW={hair:'40 30 220 340',makeup:'80 90 140 110',top:'80 190 140 130',bottom:'90 280 120 190',dress:'50 190 200 250',bra:'100 195 100 70',panties:'100 280 100 90',shoes:'100 380 100 90',tights:'90 290 120 170',jacket:'70 190 160 150',neck:'100 180 100 80',bag:'50 150 130 190',pet:'205 360 95 110',hat:'60 10 180 110',glasses:'90 100 120 80',ears:'50 130 200 70'};
+const pal=c=>PAL[c]||CL;
+const def=()=>({skin:'#ffe0cc',hair:{s:0,c:'#7a4a2b'},makeup:{s:0,c:'#ff8fb1'},top:{s:0,c:'#ff8fb1'},bottom:{s:3,c:'#6aa7ff'},dress:{s:-1,c:'#b28dff'},bra:{s:0,c:'#ffffff'},panties:{s:0,c:'#ffffff'},shoes:{s:0,c:'#ff8fb1'},tights:{s:-1,c:'#2b2b3a'},jacket:{s:-1,c:'#6aa7ff'},neck:{s:-1,c:'#ff6f9f'},bag:{s:-1,c:'#ff8fb1'},pet:{s:-1,c:'#ffd166'},hat:{s:-1,c:'#ff8fb1'},glasses:{s:-1,c:'#2b2b3a'},ears:{s:-1,c:'#ffd166'},eyes:'#3b2a4a',bg:0,st:{n:0,r:0,t:[],a:[],q:[],v:2}});
+let S=def(),tab='hair';
+
+function save(){
+  const j=JSON.stringify(S);
+  try{localStorage.setItem('doll',j)}catch(e){}
+  try{tg.CloudStorage.setItem('doll',j,()=>{})}catch(e){}
+}
+function load(cb){
+  const parse=v=>{try{return v?JSON.parse(v):null}catch(e){return null}};
+  try{if(tg&&tg.CloudStorage){tg.CloudStorage.getItem('doll',(e,v)=>cb(e?null:parse(v)));return}}catch(e){}
+  try{cb(parse(localStorage.getItem('doll')))}catch(e){cb(null)}
+}
+
+/* ---------- интерфейс ---------- */
+const $=id=>document.getElementById(id);
+const BG=['linear-gradient(160deg,#ffe9f1,#e6dcff)','linear-gradient(160deg,#cfeeff,#e8f7ff)','linear-gradient(160deg,#fff3c4,#ffd6e0)','linear-gradient(160deg,#d6f5e3,#cfe8ff)','linear-gradient(160deg,#2b2058,#6a3fa0)','linear-gradient(160deg,#ffd1dc,#ffb3c6)','linear-gradient(160deg,#fde2ff,#c3f0ff)','linear-gradient(160deg,#1f2a44,#3b4a7a)','linear-gradient(160deg,#ff9a8b,#ffd6a5)','linear-gradient(160deg,#b8f2e6,#e0fbfc)','radial-gradient(circle at 50% 30%,#ffffff,#e6dcff)','linear-gradient(160deg,#ffecd2,#fcb69f)'];
+const ACH=[
+['Первый наряд','Сменить любую вещь',s=>s.n>=1],
+['Модница','25 смен образа',s=>s.n>=25],
+['Стилист','100 смен образа',s=>s.n>=100],
+['Королева моды','300 смен образа',s=>s.n>=300],
+['Принцесса','Надеть платье',()=>S.dress.s>=0&&!S.rn],
+['Королева','Надеть корону',()=>S.hat.s===1&&!S.rn],
+['Полный образ','Платье, обувь, шапка, очки и серьги сразу',()=>S.dress.s>=0&&S.shoes.s>=0&&S.hat.s>=0&&S.glasses.s>=0&&S.ears.s>=0&&!S.rn],
+['Аксессуар-мания','Шапка, очки, серьги, шарф и сумочка сразу',()=>S.hat.s>=0&&S.glasses.s>=0&&S.ears.s>=0&&S.neck.s>=0&&S.bag.s>=0&&!S.rn],
+['Парикмахер','Примерить все причёски',s=>ITEMS.hair.every((_,i)=>s.t.includes('hair:'+i))],
+['Визажист','Примерить весь макияж',s=>ITEMS.makeup.every((_,i)=>s.t.includes('makeup:'+i))],
+['Коллекционер','Примерить 30 разных вещей',s=>s.t.length>=30],
+['Шопоголик','Примерить 60 разных вещей',s=>s.t.length>=60],
+['Мастер стиля','Примерить 90 разных вещей',s=>s.t.length>=90],
+['Первое задание','Выполнить задание дня',s=>(s.q||[]).length>=1],
+['Трудяга','Выполнить 10 заданий',s=>(s.q||[]).length>=10]];
+const TASKS=[
+['Свидание','Платье, обувь и серьги',()=>S.dress.s>=0&&S.shoes.s>=0&&S.ears.s>=0],
+['Зима','Куртка, шарф и колготки',()=>S.jacket.s>=0&&S.neck.s===2&&S.tights.s>=0],
+['На пары','Верх, низ и сумочка',()=>S.dress.s<0&&S.top.s>=0&&S.bottom.s>=0&&S.bag.s===0],
+['Принцесса бала','Корона и бальное платье',()=>S.hat.s===1&&S.dress.s===4],
+['Спорт','Кеды или кроссы, худи и штаны',()=>[0,6].includes(S.shoes.s)&&S.top.s===2&&S.bottom.s===3&&S.dress.s<0],
+['Розовая мечта','Розовые волосы и розовое платье',()=>S.hair.c==='#ff8fb1'&&S.dress.s>=0&&S.dress.c==='#ff8fb1'],
+['Отличница','Очки, рубашка и юбка плиссе',()=>S.glasses.s>=0&&S.top.s===7&&S.bottom.s===5&&S.dress.s<0],
+['С другом','Питомец и бантик на голове',()=>S.pet.s>=0&&S.hat.s===0],
+['Звезда вечеринки','Каблуки, платье и бусы',()=>S.shoes.s===5&&S.dress.s>=0&&S.neck.s===1],
+['Блондинка','Светлые волосы и тёмные очки',()=>S.hair.c==='#f2c36b'&&S.glasses.s===2],
+['Ночной стиль','Тёмный фон и яркий макияж',()=>[4,7].includes(S.bg)&&S.makeup.s===3],
+['Дождливый день','Кардиган, ботинки и колготки',()=>S.jacket.s===1&&S.shoes.s===4&&S.tights.s>=0]];
+const DAY=()=>Math.floor((Date.now()-new Date().getTimezoneOffset()*6e4)/864e5);
+const daily=()=>[0,1,2].map(k=>TASKS[(DAY()*3+k)%TASKS.length]);
+const TOTAL=Object.values(ITEMS).reduce((a,v)=>a+v.length,0);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),2600);try{tg.HapticFeedback.notificationOccurred('success')}catch(e){}}
+function bump(){const s=S.st;s.q=s.q||[];
+  if(!S.rn)daily().forEach(([n,d,f])=>{const k=DAY()+':'+n;if(!s.q.includes(k)&&f()){s.q.push(k);toast('✅ Задание: '+n)}});
+  ACH.forEach(([n,d,f])=>{if(!s.a.includes(n)&&f(s)){s.a.push(n);toast('🏆 '+n+'!')}})}
+function seen(c,i){const k=c+':'+i,t=S.st.t;if(!t.includes(k))t.push(k)}
+function ui(){
+  document.body.style.background=BG[S.bg]||BG[0];
+  $('stars').textContent=S.st.t.length+'/'+TOTAL;
+  $('stage').innerHTML=draw(S,null,true);
+  $('tabs').innerHTML=CATS.map(([c,n])=>`<button data-c="${c}" class="${c===tab?'on':''}">${n}</button>`).join('');
+  const solo=tab==='skin'||tab==='eyes',bg=tab==='bg',cur=solo?S[tab]:bg?'':S[tab].c;
+  $('sw').innerHTML=(bg||tab==='pet')?'':pal(tab).map(c=>`<button data-col="${c}" class="${c===cur?'on':''}" style="background:${c}" aria-label="цвет"></button>`).join('')+`<input type="color" id="cp" value="${/^#[0-9a-f]{6}$/i.test(cur)?cur:'#ff8fb1'}" aria-label="свой цвет">`;
+  if(solo){$('grid').innerHTML='';return}
+  if(bg){$('grid').innerHTML=BG.map((b,i)=>`<button data-i="${i}" class="${S.bg===i?'on':''}"><span style="display:block;height:56px;border-radius:12px;background:${b}"></span>${i+1}</button>`).join('');return}
+  const none={s:-1,c:'#ffffff'};
+  let h=`<button data-i="-1" class="${S[tab].s<0?'on':''}"><span class="no">✕</span>нет</button>`;
+  ITEMS[tab].forEach((it,i)=>{
+    const t={skin:S.skin};Object.keys(ITEMS).forEach(c=>t[c]=none);
+    t[tab]={s:i,c:S[tab].c};
+    h+=`<button data-i="${i}" class="${S[tab].s===i?'on':''}">${draw(t,VIEW[tab])}${it.n}</button>`;
+  });
+  $('grid').innerHTML=h;
+}
+function setCol(v){
+  if(tab==='skin'||tab==='eyes')S[tab]=v;
+  else{S[tab].c=v;if(S[tab].s<0){S[tab].s=0;seen(tab,0);S.st.n++}}
+  S.rn=0;save();bump();ui();
+}
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(b){tab=b.dataset.c;ui()}};
+$('sw').onclick=e=>{const b=e.target.closest('button');if(b)setCol(b.dataset.col)};
+$('sw').onchange=e=>{if(e.target.id==='cp')setCol(e.target.value)};
+$('grid').onclick=e=>{const b=e.target.closest('button');if(!b)return;const i=+b.dataset.i;
+  if(tab==='bg')S.bg=i;
+  else{if(i>=0&&(tab==='top'||tab==='bottom'))S.dress.s=-1;S[tab].s=i;if(i>=0){seen(tab,i);S.st.n++}}
+  S.rn=0;save();bump();ui()};
+$('rnd').onclick=()=>{
+  const k=S.skin,e=S.eyes,b=S.bg,st=S.st;S=def();Object.assign(S,{skin:k,eyes:e,bg:b,st});
+  Object.keys(ITEMS).forEach(c=>{const on=!['hat','glasses','ears','tights','jacket','neck','bag','pet'].includes(c)||Math.random()<.5;S[c]={s:on?Math.floor(Math.random()*ITEMS[c].length):-1,c:pick(pal(c))}});
+  S.dress.s=Math.random()<.35?Math.floor(Math.random()*ITEMS.dress.length):-1;
+  S.bra.c=S.panties.c=pick(CL);S.rn=1;
+  save();ui();try{tg.HapticFeedback.impactOccurred('light')}catch(e){}
+};
+$('rst').onclick=()=>{const k=S.skin,e=S.eyes,b=S.bg,st=S.st;S=def();Object.assign(S,{skin:k,eyes:e,bg:b,st});save();ui()};
+$('trf').onclick=()=>{const a=S.st.a;$('ov').innerHTML=`<div class="box"><h2>Задания дня</h2>${daily().map(([n,d])=>`<div class="a ok"><span>${S.st.q.includes(DAY()+':'+n)?'✅':'⬜'}</span><div><b>${n}</b><small>${d}</small></div></div>`).join('')}<h2 style="margin-top:14px">Достижения ${a.length}/${ACH.length}</h2><small>Примерено вещей: ${S.st.t.length}/${TOTAL}</small>`+ACH.map(([n,d])=>`<div class="a ${a.includes(n)?'ok':''}"><span>${a.includes(n)?'🏆':'🔒'}</span><div><b>${n}</b><small>${d}</small></div></div>`).join('')+'</div>';$('ov').classList.add('on')};
+$('ov').onclick=e=>{if(e.target.id==='ov')$('ov').classList.remove('on')};
+
+$('snp').onclick=()=>{
+  const x=draw(S,null,false).replace('<svg ','<svg width="600" height="960" ');
+  const im=new Image();
+  im.onload=()=>{const c=document.createElement('canvas');c.width=600;c.height=960;const g=c.getContext('2d');
+    const gr=g.createLinearGradient(0,0,600,960);gr.addColorStop(0,'#ffe9f1');gr.addColorStop(1,'#e6dcff');g.fillStyle=gr;g.fillRect(0,0,600,960);g.drawImage(im,0,0,600,960);
+    $('ov').innerHTML=`<div class="box" style="text-align:center"><h2>Твой образ</h2><img src="${c.toDataURL('image/png')}" style="max-height:55dvh;max-width:100%"><p>Нажми на картинку и удерживай, чтобы сохранить или отправить</p></div>`;$('ov').classList.add('on')};
+  im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(x);
+};
+ui();
+load(v=>{if(v&&v.hair){S=Object.assign(def(),v);if(!S.st||S.st.v!==2)S.st=def().st;S.st.q=S.st.q||[];ui()}});
+</script>
+</body>
+</html>
